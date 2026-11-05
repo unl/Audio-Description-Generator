@@ -6,17 +6,7 @@ A CLI based audio description generation tool built on Python leveraging the pow
 
 Installation is written for MacOS
 
-1. Install pyenv for python 3.11
-    1. Run `brew install pyenv`
-    2. Add these commands to your `~/.zshrc` or `~/bashrc`
-
-        ```BASH
-            export PYENV_ROOT="$HOME/.pyenv"
-            [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-            eval "$(pyenv init - zsh)"
-        ```
-
-    3. Restart your terminal and run `pyenv install 3.11`
+1. Install python 3.14
 2. Install FFMPEG and Ollama and espeak
     - Run `brew install ffmpeg` for video editing
     - Run `brew install espeak` for some AI Text-To-Speech
