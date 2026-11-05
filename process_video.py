@@ -7,7 +7,7 @@ import uuid
 import time
 
 import ffmpeg_helper
-import text_to_speech
+import text_to_speech_ollama
 
 DEBUG = False
 SAVE_FILES = False
@@ -100,7 +100,7 @@ def process_video(script_input:str, video_input:str, video_output:str):
             # Generate TTS
             narration_track_path = f'{tmp_path}{line_count}_narration_track.wav'
             FILES.append(narration_track_path)
-            text_to_speech.generate_audio(text, narration_track_path)
+            text_to_speech_ollama.generate_audio(text, narration_track_path)
 
             next_time = timestamp
 

@@ -11,6 +11,7 @@
 !audio_block_detect.py
 !describe_scene.py
 !text_to_speech.py
+!text_to_speech_ollama.py
 !visual_scene_detect.py
 !process_video.py
 !visual_scene_detect_clip.py
