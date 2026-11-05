@@ -35,7 +35,7 @@ def _delete_tmp_file(file_path):
 
     file_path = os.path.abspath(file_path)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    directory_path = os.path.join(script_dir, '/tmp')
+    directory_path = os.path.join(script_dir, 'tmp')
     if not os.path.dirname(file_path) == directory_path:
         raise ValueError('Trying to delete a file outside tmp folder')
 
