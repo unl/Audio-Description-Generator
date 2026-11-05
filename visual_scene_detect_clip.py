@@ -34,7 +34,8 @@ def delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    directory_path = os.path.abspath('./tmp')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    directory_path = os.path.join(script_dir, 'tmp')
     if not os.path.dirname(file_path) == directory_path:
         raise ValueError('Trying to delete a file outside tmp folder')
 
@@ -76,7 +77,8 @@ def get_visual_scenes(video_path:str, seconds_per_check:int=2, threshold:float=0
     scene_number = 1
 
     for frame_index in range(0, int(duration), seconds_per_check):
-        tmpdir = f'./tmp/frame_{frame_index}.png'
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        tmpdir = os.path.join(script_dir, 'tmp', f'frame_{frame_index}.png')
         FILES.append(tmpdir)
 
         debug_print(f'Frame: {frame_index} of {int(duration)}')

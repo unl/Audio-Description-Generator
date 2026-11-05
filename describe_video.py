@@ -43,7 +43,8 @@ def delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    directory_path = os.path.abspath('./tmp')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    directory_path = os.path.join(script_dir, 'tmp')
     if not os.path.dirname(file_path) == directory_path:
         raise ValueError('Trying to delete a file outside tmp folder')
 
@@ -79,8 +80,9 @@ def process_video(video_input:str, script_output:str):
     debug_print(f'Video Input: {video_input}', True)
 
     # Make tmp dir if not exists
-    os.makedirs('./tmp', exist_ok=True)
-    tmp_path = f'./tmp/{video_uuid}_'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(os.path.join(script_dir, 'tmp'), exist_ok=True)
+    tmp_path = os.path.join(script_dir, f'{video_uuid}_')
 
     # Get the different scenes in the video
     debug_print('Detecting Audio Blocks')

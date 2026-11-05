@@ -1,4 +1,5 @@
 """ FFMPEG helper functions for running common commands """
+import os
 import argparse
 import subprocess
 
@@ -222,8 +223,8 @@ def create_still_frame_narration_clip(audio_input:str, image_input:str, video_ou
         # Audio settings
         '-c:a', AUDIO_ENCODING, '-b:a', BITRATE, '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
         # Make sure the output matches the shortest stream length
-        # These arguments `-fflags +shortest -max_interleave_delta 100M` are there to prevent any weird silence at the end of the video
-        '-shortest', '-fflags', '+shortest', '-max_interleave_delta', '100M',
+        # This argument `-max_interleave_delta 100M` is there to prevent any weird silence at the end of the video
+        '-shortest', '-max_interleave_delta', '100M',
         video_output
     ]
 
@@ -234,9 +235,11 @@ def create_still_frame_narration_clip(audio_input:str, image_input:str, video_ou
 
 def export_clips_to_file(clips_file_output:str, clips: list):
     """ Taking a list of clips (file paths) it will write it to a file for ffmpeg """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    temp_dir = os.path.join(script_dir, 'tmp')
     with open(clips_file_output, 'w', encoding='utf-8') as clips_file:
         for clip in clips:
-            clips_file.write(f'file {clip.replace("./tmp/", "")}\n')
+            clips_file.write(f'file {clip.replace(f'{temp_dir}/', "")}\n')
 
 def combine_videos(video_output:str, clips_file_input: str):
     """ Taking a clips file it will concat all the videos together """

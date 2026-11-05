@@ -15,7 +15,8 @@ def generate_audio(text:str, audio_output:str, model:str = 'tts_models/en/vctk/v
     tts_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     tts_obj = TTS(model).to(tts_device)
 
-    tmp_file_path = f'./tmp/{uuid.uuid4()}_tts.wav'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    tmp_file_path = os.path.join(script_dir, 'tmp', f'{uuid.uuid4()}_tts.wav')
 
     tts_obj.tts_to_file(text=text, file_path=tmp_file_path, language=language, speaker=speaker)
 
@@ -33,7 +34,8 @@ def _delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    directory_path = os.path.abspath('./tmp')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    directory_path = os.path.join(script_dir, '/tmp')
     if not os.path.dirname(file_path) == directory_path:
         raise ValueError('Trying to delete a file outside tmp folder')
 
