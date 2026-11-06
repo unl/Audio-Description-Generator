@@ -15,6 +15,8 @@ SAVE_FILES = False
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
 
+# Intermediate clips are Matroska with PCM audio (see ffmpeg_helper.INTERMEDIATE_AUDIO_ENCODING)
+CLIP_EXTENSION = 'mkv'
 
 FILES = []
 
@@ -72,7 +74,8 @@ def process_video(script_input:str, video_input:str, video_output:str):
     clips = []
     previous_time = 0
     next_time = 0
-    total_duration = ffmpeg_helper.get_duration(video_input)
+    # Every cut point is snapped to a frame boundary so each clip is a whole number of frames
+    total_duration = ffmpeg_helper.snap_to_frame(ffmpeg_helper.get_duration(video_input))
 
     debug_print(f'Total Duration: {total_duration}', True)
 
@@ -90,17 +93,23 @@ def process_video(script_input:str, video_input:str, video_output:str):
             # Split on the first space only
             time_str, text = current_line.split(" ", 1)
 
-            # Convert the first part to float
-            timestamp = float(time_str)
+            # Convert the first part to float and snap it to the frame grid
+            timestamp = ffmpeg_helper.snap_to_frame(float(time_str))
 
             debug_print(f'Time: {timestamp}')
             debug_print(f'Text: {text}')
 
             debug_print('Generating TTS')
             # Generate TTS
+            raw_track_path = f'{tmp_path}{line_count}_narration_raw.wav'
+            FILES.append(raw_track_path)
+            text_to_speech_ollama.generate_audio(text, raw_track_path)
+
+            debug_print('Trimming TTS silence')
             narration_track_path = f'{tmp_path}{line_count}_narration_track.wav'
             FILES.append(narration_track_path)
-            text_to_speech_ollama.generate_audio(text, narration_track_path)
+            ffmpeg_helper.prepare_narration_audio(raw_track_path, narration_track_path)
+            delete_tmp_file(raw_track_path)
 
             next_time = timestamp
 
@@ -109,7 +118,7 @@ def process_video(script_input:str, video_input:str, video_output:str):
                 clip_end = ffmpeg_helper.seconds_to_timecode(next_time)
                 debug_print(f'Clipping at {clip_start} to {clip_end}')
 
-                clip_path = f'{tmp_path}{line_count}_video_clip.mp4'
+                clip_path = f'{tmp_path}{line_count}_video_clip.{CLIP_EXTENSION}'
                 FILES.append(clip_path)
                 ffmpeg_helper.cut_video_into_clip(video_input, clip_path, clip_start, clip_end)
                 clips.append(clip_path)
@@ -120,7 +129,7 @@ def process_video(script_input:str, video_input:str, video_output:str):
             ffmpeg_helper.save_frame_at_time_as_image(video_input, timestamp, frame_at_time_path, 0)
 
             debug_print('Generating narration clip')
-            narration_clip_path = f'{tmp_path}{line_count}_narration_clip.mp4'
+            narration_clip_path = f'{tmp_path}{line_count}_narration_clip.{CLIP_EXTENSION}'
             FILES.append(narration_clip_path)
             ffmpeg_helper.create_still_frame_narration_clip(narration_track_path, frame_at_time_path, narration_clip_path)
             clips.append(narration_clip_path)
@@ -131,12 +140,12 @@ def process_video(script_input:str, video_input:str, video_output:str):
             delete_tmp_file(narration_track_path)
             delete_tmp_file(frame_at_time_path)
 
-    if previous_time != total_duration:
+    if previous_time < total_duration:
         clip_start = ffmpeg_helper.seconds_to_timecode(previous_time)
         clip_end = ffmpeg_helper.seconds_to_timecode(total_duration)
         debug_print(f'Clipping at {clip_start} to {clip_end}', True)
 
-        clip_path = f'{tmp_path}final_video_clip.mp4'
+        clip_path = f'{tmp_path}final_video_clip.{CLIP_EXTENSION}'
         FILES.append(clip_path)
         ffmpeg_helper.cut_video_into_clip(video_input, clip_path, clip_start, clip_end)
         clips.append(clip_path)

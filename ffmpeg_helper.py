@@ -1,5 +1,6 @@
 """ FFMPEG helper functions for running common commands """
 import os
+import math
 import argparse
 import subprocess
 
@@ -8,13 +9,22 @@ ENCODER_PRESET = 'fast'
 CONSTANT_RATE_FACTOR = '23'
 PIXEL_FORMAT = 'yuv420p'
 FRAME_RATE = '30'
+FPS = int(FRAME_RATE)
 
 AUDIO_ENCODING = 'aac'
 BITRATE = '192k'
 SAMPLE_RATE = '48000'
 AUDIO_CHANNELS = '2'
 
+# Intermediate clips (everything except the final export) store uncompressed audio.
+# AAC adds encoder delay/padding to every file, and those few milliseconds add up
+# when dozens of clips are concatenated. The final export re-encodes to AAC once.
+INTERMEDIATE_AUDIO_ENCODING = 'pcm_s16le'
+
+# Silence deliberately left after each narration before the video resumes
 STILL_FRAME_AUDIO_PADDING_SECONDS = '0.5'
+# Anything quieter than this at the end of the TTS output counts as "blank"
+TTS_SILENCE_THRESHOLD = '-50dB'
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
@@ -32,8 +42,12 @@ def set_debug(new_debug:bool):
     """ Sets DEBUG """
 
     # pylint: disable=global-statement
-    global VIDEO_ENCODING
-    VIDEO_ENCODING = new_debug
+    global DEBUG
+    DEBUG = new_debug
+
+def snap_to_frame(seconds: float) -> float:
+    """ Rounds a time to the nearest frame boundary of the output frame rate """
+    return round(seconds * FPS) / FPS
 
 def timecode_to_seconds(timecode: str) -> float:
     """ Convert a timecode string (hh:mm:ss.ms) to total seconds as a float """
@@ -88,7 +102,7 @@ def slow_down_audio_file(audio_input:str, audio_output:str, slow_down_percent:fl
     subprocess.run(cmd, check=True)
 
 def get_duration(media_input:str) -> float:
-    """ Converts a video file to the audio wav file """
+    """ Returns the duration (in seconds) of a media file """
     cmd = [
         'ffprobe', '-i', media_input,
         '-show_entries', 'format=duration', '-v', 'quiet', '-of', 'csv=p=0'
@@ -123,7 +137,7 @@ def get_total_frames(video_input: str) -> int:
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    return float(result.stdout)
+    return int(result.stdout)
 
 
 def normalize_video(video_input:str, video_output:str):
@@ -144,20 +158,28 @@ def normalize_video(video_input:str, video_output:str):
     subprocess.run(cmd, check=True)
 
 def cut_video_into_clip(video_input:str, video_output:str, start_time:str, end_time:str):
-    """ Based on the start time and end time it will cut the video and save a copy """
+    """
+    Based on the start time and end time it will cut the video and save a copy.
+    Video and audio are both forced to be exactly (end - start) long, so the clip's
+    audio can never run ahead of or behind its video once clips are joined.
+    """
+    duration = timecode_to_seconds(end_time) - timecode_to_seconds(start_time)
+
     # Re-encode the clip to avoid issues when it comes to key frames
     cmd = [
         'ffmpeg', '-y',
         # Video input
         '-i', video_input,
-        # Seek to start time and cut to end time
-        '-ss', start_time, '-to', end_time,
+        # Seek to start time and keep exactly `duration` seconds
+        '-ss', start_time, '-t', f'{duration:.6f}',
         '-avoid_negative_ts', 'make_zero', '-fflags', '+genpts',
+        # Start both streams at 0 and pad audio with silence if the source audio is short
+        '-vf', 'setpts=PTS-STARTPTS', '-af', 'asetpts=PTS-STARTPTS,apad',
         # Video settings
         '-c:v', VIDEO_ENCODING, '-preset', ENCODER_PRESET,
         '-crf', CONSTANT_RATE_FACTOR, '-pix_fmt', PIXEL_FORMAT, '-r', FRAME_RATE,
         # Audio settings
-        '-c:a', AUDIO_ENCODING, '-b:a', BITRATE, '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
+        '-c:a', INTERMEDIATE_AUDIO_ENCODING, '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
         video_output
     ]
 
@@ -212,22 +234,57 @@ def save_frame_by_number(video_input:str, frame_number:int, output_image:str, im
     cmd.append(output_image)
     subprocess.run(cmd, check=True)
 
+def prepare_narration_audio(audio_input:str, audio_output:str,
+                            padding_seconds:float = float(STILL_FRAME_AUDIO_PADDING_SECONDS)):
+    """
+    Cleans up raw TTS output: trims the blank audio the TTS engine leaves at the end,
+    converts to the project's sample rate/channels, and then adds exactly `padding_seconds`
+    of silence. The result is a PCM wav, so its duration is exact and can be trusted.
+    """
+    # silenceremove only trims the *start* of a stream, so reverse -> trim -> reverse
+    trim_end = (
+        f'areverse,silenceremove=start_periods=1:start_threshold={TTS_SILENCE_THRESHOLD}'
+        ':detection=peak,areverse'
+    )
+    filters = f'{trim_end},apad=pad_dur={padding_seconds}'
+
+    cmd = [
+        'ffmpeg', '-y', '-i', audio_input,
+        '-af', filters,
+        '-c:a', 'pcm_s16le', '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
+        audio_output
+    ]
+
+    if not DEBUG:
+        cmd.extend(['-loglevel', 'error'])
+
+    subprocess.run(cmd, check=True)
+
 def create_still_frame_narration_clip(audio_input:str, image_input:str, video_output:str):
-    """ Using the image and audio file it will create a still frame video (with a bit of silence at the end of the clip) """
+    """
+    Using the image and audio file it will create a still frame video.
+    The clip length is the narration length rounded UP to a whole number of frames, and
+    both the video and the audio are forced to exactly that length (audio is padded with
+    silence). `audio_input` should come from prepare_narration_audio.
+    """
+    frames = max(1, math.ceil(get_duration(audio_input) * FPS - 1e-6))
+    clip_duration = frames / FPS
+
     cmd = [
         'ffmpeg', '-y',
         # Loop image for the whole video
-        '-loop', '1', '-i', image_input,
+        '-loop', '1', '-framerate', FRAME_RATE, '-i', image_input,
         # Add narration track
         '-i', audio_input,
+        # Pad the audio with silence (up to the frame boundary), then cut both streams
+        # at exactly the same length. Replaces `-shortest`, which let the streams
+        # end at slightly different times.
+        '-af', 'apad', '-t', f'{clip_duration:.6f}',
         # Video settings
         '-c:v', VIDEO_ENCODING, '-tune', 'stillimage', '-preset', ENCODER_PRESET,
         '-crf', CONSTANT_RATE_FACTOR, '-pix_fmt', PIXEL_FORMAT, '-r', FRAME_RATE,
         # Audio settings
-        '-c:a', AUDIO_ENCODING, '-b:a', BITRATE, '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
-        # Make sure the output matches the shortest stream length
-        # This argument `-max_interleave_delta 100M` is there to prevent any weird silence at the end of the video
-        '-shortest', '-max_interleave_delta', '100M',
+        '-c:a', INTERMEDIATE_AUDIO_ENCODING, '-ar', SAMPLE_RATE, '-ac', AUDIO_CHANNELS,
         video_output
     ]
 
@@ -240,7 +297,9 @@ def export_clips_to_file(clips_file_output:str, clips: list):
     """ Taking a list of clips (file paths) it will write it to a file for ffmpeg """
     with open(clips_file_output, 'w', encoding='utf-8') as clips_file:
         for clip in clips:
-            clips_file.write(f'file {clip.replace(f'{TMP_FOLDER}/', "")}\n')
+            # Paths in a concat list are relative to the list file (which lives in TMP_FOLDER)
+            relative_clip = clip.replace(f'{TMP_FOLDER}/', '')
+            clips_file.write(f'file {relative_clip}\n')
 
 def combine_videos(video_output:str, clips_file_input: str):
     """ Taking a clips file it will concat all the videos together """
@@ -264,7 +323,7 @@ def combine_videos(video_output:str, clips_file_input: str):
 # CLI Entry
 # -------------------------------
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Detect audio blocks from audio input')
+    parser = argparse.ArgumentParser(description='Run an ffmpeg helper function')
     parser.add_argument('-f',
                         '--function',
                         required=True,
@@ -315,7 +374,8 @@ if __name__ == '__main__':
             print(get_duration(args.video))
         elif args.audio is not None:
             print(get_duration(args.audio))
-        raise ValueError('Missing video input file path or audio input path')
+        else:
+            raise ValueError('Missing video input file path or audio input path')
 
     elif args.function == 'normalize_video':
         if args.video is None:
@@ -349,7 +409,14 @@ if __name__ == '__main__':
             raise ValueError('Missing output file path')
         if args.time_duration is None:
             raise ValueError('Missing time duration in seconds')
-        save_frame_at_time_as_image(args.video, args.time_duration, args.output)
+        save_frame_at_time_as_image(args.video, float(args.time_duration), args.output)
+
+    elif args.function == 'prepare_narration_audio':
+        if args.audio is None:
+            raise ValueError('Missing audio input file path')
+        if args.output is None:
+            raise ValueError('Missing output file path')
+        prepare_narration_audio(args.audio, args.output)
 
     elif args.function == 'create_still_frame_narration_clip':
         if args.image is None:
@@ -358,11 +425,11 @@ if __name__ == '__main__':
             raise ValueError('Missing audio input file path')
         if args.output is None:
             raise ValueError('Missing output file path')
-        save_frame_at_time_as_image(args.image, args.audio, args.output)
+        create_still_frame_narration_clip(args.audio, args.image, args.output)
 
     elif args.function == 'combine_videos':
         if args.text is None:
             raise ValueError('Missing text input file path')
         if args.output is None:
             raise ValueError('Missing output file path')
-        combine_videos(args.text, args.output)
+        combine_videos(args.output, args.text)
