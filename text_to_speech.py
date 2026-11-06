@@ -8,6 +8,9 @@ from TTS.api import TTS
 
 import ffmpeg_helper
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
+
 def generate_audio(text:str, audio_output:str, model:str = 'tts_models/en/vctk/vits', language:str|None = None, speaker:str|None = 'p244', slow_down_percent:float=0.9):
     """ Takes in a string of text and saves an audio file of the narration of that text """
 
@@ -15,8 +18,7 @@ def generate_audio(text:str, audio_output:str, model:str = 'tts_models/en/vctk/v
     tts_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     tts_obj = TTS(model).to(tts_device)
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    tmp_file_path = os.path.join(script_dir, 'tmp', f'{uuid.uuid4()}_tts.wav')
+    tmp_file_path = os.path.join(TMP_FOLDER, f'{uuid.uuid4()}_tts.wav')
 
     tts_obj.tts_to_file(text=text, file_path=tmp_file_path, language=language, speaker=speaker)
 
@@ -34,9 +36,7 @@ def _delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    directory_path = os.path.join(script_dir, 'tmp')
-    if not os.path.dirname(file_path) == directory_path:
+    if not os.path.dirname(file_path) == TMP_FOLDER:
         raise ValueError('Trying to delete a file outside tmp folder')
 
     os.remove(file_path)

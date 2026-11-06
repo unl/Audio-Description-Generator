@@ -16,6 +16,9 @@ AUDIO_CHANNELS = '2'
 
 STILL_FRAME_AUDIO_PADDING_SECONDS = '0.5'
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
+
 DEBUG = False
 
 def set_video_encoding(new_encoding:str):
@@ -235,11 +238,9 @@ def create_still_frame_narration_clip(audio_input:str, image_input:str, video_ou
 
 def export_clips_to_file(clips_file_output:str, clips: list):
     """ Taking a list of clips (file paths) it will write it to a file for ffmpeg """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    temp_dir = os.path.join(script_dir, 'tmp')
     with open(clips_file_output, 'w', encoding='utf-8') as clips_file:
         for clip in clips:
-            clips_file.write(f'file {clip.replace(f'{temp_dir}/', "")}\n')
+            clips_file.write(f'file {clip.replace(f'{TMP_FOLDER}/', "")}\n')
 
 def combine_videos(video_output:str, clips_file_input: str):
     """ Taking a clips file it will concat all the videos together """

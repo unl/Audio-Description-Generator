@@ -14,6 +14,9 @@ import visual_scene_detect_clip
 DEBUG = False
 SAVE_FILES = False
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
+
 MODEL = 'gemma3:12b'
 
 # pylint: disable=line-too-long
@@ -43,9 +46,7 @@ def delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    directory_path = os.path.join(script_dir, 'tmp')
-    if not os.path.dirname(file_path) == directory_path:
+    if not os.path.dirname(file_path) == TMP_FOLDER:
         raise ValueError('Trying to delete a file outside tmp folder')
 
     os.remove(file_path)
@@ -80,9 +81,8 @@ def process_video(video_input:str, script_output:str):
     debug_print(f'Video Input: {video_input}', True)
 
     # Make tmp dir if not exists
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    os.makedirs(os.path.join(script_dir, 'tmp'), exist_ok=True)
-    tmp_path = os.path.join(script_dir, f'{video_uuid}_')
+    os.makedirs(TMP_FOLDER, exist_ok=True)
+    tmp_path = os.path.join(TMP_FOLDER, f'{video_uuid}_')
 
     # Get the different scenes in the video
     debug_print('Detecting Audio Blocks')

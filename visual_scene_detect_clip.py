@@ -14,6 +14,9 @@ SAVE_FILES = False
 FILES = []
 DEBUG = False
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_FOLDER = os.path.join(SCRIPT_DIR, 'tmp')
+
 def _exit_handler():
     """ Cleans up files before exiting """
 
@@ -34,9 +37,7 @@ def delete_tmp_file(file_path):
         raise ValueError('Trying to delete a non-file')
 
     file_path = os.path.abspath(file_path)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    directory_path = os.path.join(script_dir, 'tmp')
-    if not os.path.dirname(file_path) == directory_path:
+    if not os.path.dirname(file_path) == TMP_FOLDER:
         raise ValueError('Trying to delete a file outside tmp folder')
 
     os.remove(file_path)
@@ -77,8 +78,7 @@ def get_visual_scenes(video_path:str, seconds_per_check:int=2, threshold:float=0
     scene_number = 1
 
     for frame_index in range(0, int(duration), seconds_per_check):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        tmpdir = os.path.join(script_dir, 'tmp', f'frame_{frame_index}.png')
+        tmpdir = os.path.join(TMP_FOLDER, f'frame_{frame_index}.png')
         FILES.append(tmpdir)
 
         debug_print(f'Frame: {frame_index} of {int(duration)}')
