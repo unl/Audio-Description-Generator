@@ -96,6 +96,11 @@ def process_video(video_input:str, script_output:str):
     for video_block in video_blocks:
         debug_print(f'- Video Block: {video_block["scene_number"]:03}, Start: {video_block["start_timecode"]}, End: {video_block["end_timecode"]}')
 
+    if len(audio_blocks) == 0:
+        debug_print('- No audio blocks, we will use the video blocks instead')
+        #TODO: This doesn't seem like it is working 100% correctly
+        audio_blocks = video_blocks
+
     video_narration_script = []
 
     current_video_index = 0
