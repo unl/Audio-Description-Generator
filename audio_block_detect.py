@@ -1,7 +1,18 @@
 """ Module for detecting audio blocks """
 import argparse
+import os
 import whisper
 import ffmpeg_helper
+
+DEBUG = False
+
+def debug_print(message, extra_new_line:bool = False):
+    """ Print message is DEBUG is true """
+    if DEBUG:
+        if extra_new_line:
+            print(message, end=os.linesep+os.linesep)
+        else:
+            print(message)
 
 def get_audio_blocks(audio_input:str, min_pause:float=0.6, min_confidence:float=0.4):
     """
@@ -51,7 +62,7 @@ def get_audio_blocks(audio_input:str, min_pause:float=0.6, min_confidence:float=
         current_word_end = float(single_word["end"])
         gap = current_word_start - text_buffer_end
 
-        print(single_word, gap)
+        debug_print(single_word, gap)
 
         # We found a big enough gap in the speech so we should save the buffer
         if gap > min_pause:
@@ -105,6 +116,9 @@ if __name__ == '__main__':
                         '--min_confidence',
                         default='0.4',
                         help='Minimum confidence for keeping a word')
+    parser.add_argument('--debug',
+                        action='store_true',
+                        help='Debug mode')
     args = parser.parse_args()
 
     print(get_audio_blocks(args.input, float(args.min_length)))
